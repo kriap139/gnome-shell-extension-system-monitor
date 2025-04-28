@@ -1,16 +1,17 @@
 "use strict";
 
-const Me = imports.misc.extensionUtils.getCurrentExtension();
-const IndicatorModule = Me.imports.indicator;
-const MeterModule = Me.imports.meter;
-const FileModule = Me.imports.helpers.file;
-const Widget = Me.imports.widget;
-const Util = Me.imports.util;
+import * as IndicatorModule from './indicator.js';
+import * as MeterModule from './meter.js';
+import * as FileModule from './helpers/file.js';
+import * as Widget from './widget.js';
+import * as Util from './util.js';
+import * as PrefsKeys from './prefs_keys.js';
 
-const Gio = imports.gi.Gio;
-const PrefsKeys = Me.imports.prefs_keys;
+import Gio from 'gi://Gio';
 
-var AbstractFactory = (function() {
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+
+export const AbstractFactory = (function() {
 
     var types = {};
 
@@ -55,7 +56,7 @@ IconFactory.prototype.concreteClass = IndicatorModule.Icon;
 // Create an indicator icon object, options will be passed to the real object's constructor.
 //
 // For working with themed icons see http://standards.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
-IconFactory.prototype.create = function(type, options, can_show_activity) {
+IconFactory.prototype.create = function(type, options, can_show_activity, extensionObject) {
 	let default_options = {
 		style_class: 'system-status-icon system-monitor-icon',
 		reactive: true,
@@ -72,10 +73,10 @@ IconFactory.prototype.create = function(type, options, can_show_activity) {
 	} else if (type == PrefsKeys.LOAD_METER) {
 		constructor_options.icon_name = 'computer-symbolic';
 	} else if (type == PrefsKeys.CPU_METER) {
-        let path = Me.dir.get_path() + '/icons/hicolor/scalable/devices/cpu-symbolic.svg';
+        let path = extensionObject.path + '/icons/hicolor/scalable/devices/cpu-symbolic.svg';
 		constructor_options.gicon = Gio.icon_new_for_string(path);
 	} else if (type == PrefsKeys.MEMORY_METER) {
-        let path = Me.dir.get_path() + '/icons/hicolor/scalable/devices/memory-symbolic.svg';
+        let path = extensionObject.path + '/icons/hicolor/scalable/devices/memory-symbolic.svg';
 		constructor_options.gicon = Gio.icon_new_for_string(path);
 	} else if (type == PrefsKeys.SWAP_METER) {
 		constructor_options.icon_name = 'media-removable-symbolic';
@@ -86,14 +87,14 @@ IconFactory.prototype.create = function(type, options, can_show_activity) {
 		throw new RangeError('Unknown indicator type "' + type + '" given.');
 	}
 
-    let range = [
-        { red:190, green: 190, blue: 190 },
-        { red:255, green: 204, blue: 0 },
-        { red:255, green: 0, blue: 0 }
+    let color_range = [
+        new Util.Color(190, 190, 190),
+        new Util.Color(255, 204, 0),
+        new Util.Color(255, 0, 0)
     ];
 	let caution_class = 'indicator-caution';
 
-	return new IconFactory.prototype.concreteClass(constructor_options, range, caution_class, can_show_activity);
+	return new IconFactory.prototype.concreteClass(constructor_options, color_range, caution_class, can_show_activity);
 };
 
 AbstractFactory.registerObject('icon', IconFactory);
@@ -187,10 +188,10 @@ MeterWidgetFactory.prototype.create = function(type, icon) {
 		title = 'Network';
         meter_widget = new Widget.NetworkInterfaceItemsContainer();
 	} else if (type == PrefsKeys.SWAP_METER) {
-		title = 'Virtual memory';
+		title = 'Virtual Memory';
         meter_widget = new Widget.ProcessItemsContainer();
 	} else if (type == PrefsKeys.LOAD_METER) {
-		title = 'System load';
+		title = 'System Load';
         meter_widget = new Widget.SystemLoadItemsContainer();
 	} else if (type == PrefsKeys.GPU_METER) {
 		title = 'GPU';
@@ -217,7 +218,7 @@ MeterWidgetItemFactory.prototype.create = function(type) {
         case PrefsKeys.MEMORY_METER:
         case PrefsKeys.SWAP_METER:
             return new Widget.ProcessItem('loading...', "edit-delete-symbolic", function(actor, event, state) {
-                log('Process called "{name}" with PID {pid} is going to be killed by user resuest.'.replace('{name}', state.command).replace('{pid}', state.pid));
+                console.info('Process called "{name}" with PID {pid} is going to be killed by user resuest.'.replace('{name}', state.command).replace('{pid}', state.pid));
                 (new Util.Process(state.pid)).kill();
             });
 

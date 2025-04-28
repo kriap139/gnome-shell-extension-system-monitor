@@ -1,14 +1,43 @@
 "use strict";
 
-const Util = imports.misc.util;
-const GTop = imports.gi.GTop;
-const GLib = imports.gi.GLib;
+import GTop from 'gi://GTop';
+import GLib from 'gi://GLib';
 
-const Me = imports.misc.extensionUtils.getCurrentExtension();
-const FactoryModule = Me.imports.factory;
-const AsyncModule = Me.imports.helpers.async;
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 
-var Process = class {
+import * as FactoryModule from './factory.js';
+import * as AsyncModule from './helpers/async.js';
+
+export class Color {
+    #r;
+    #g;
+    #b;
+
+    constructor (red, green, blue) {
+        this.#r = red;
+        this.#g = green;
+        this.#b = blue;
+    }
+
+    interpolate(color, ratio) {
+        // Ensure the ratio is between 0 and 1
+        ratio = Math.max(0, Math.min(1, ratio));
+
+        // Interpolate each color channel
+        let r = Math.round(this.#r + ratio * (color.#r - this.#r));
+        let g = Math.round(this.#g + ratio * (color.#g - this.#g));
+        let b = Math.round(this.#b + ratio * (color.#b - this.#b));
+
+        return new Color(r, g, b);
+    }
+
+    toString() {
+        return `rgb(${this.#r},${this.#g},${this.#b})`;
+    }
+}
+
+export class Process {
     constructor(id) {
         this._id = id;
     }
@@ -16,9 +45,9 @@ var Process = class {
     kill() {
         Util.spawn([ 'bash', '-c', 'kill -s TERM ' + parseInt(this._id) ]);
     }
-};
+}
 
-var Processes = class {
+export class Processes {
     constructor() {
         this._tasks = new AsyncModule.Tasks();
     }
@@ -80,9 +109,9 @@ var Processes = class {
         this._tasks.cancel();
         this._tasks = null;
     }
-};
+}
 
-var Directories = class {
+export class Directories {
     /**
      * Get the list of directories using the most space.
      *
@@ -118,9 +147,9 @@ var Directories = class {
         let i = Math.floor(Math.log(bytes) / Math.log(kilo));
         return parseFloat((bytes / Math.pow(kilo, i)).toFixed(expected_decimals)) + ' ' + sizes[i];
     }
-};
+}
 
-var Network = class {
+export class Network {
     /**
      * Format the input bytes to the closet possible size unit.
      *
@@ -138,9 +167,9 @@ var Network = class {
         let i = Math.floor(Math.log(bytes) / Math.log(kilo));
         return parseFloat((bytes / Math.pow(kilo, i)).toFixed(expected_decimals)) + ' ' + sizes[i];
     }
-};
+}
 
-var Swap = class {
+export class Swap {
     constructor() {
         this._processes = new Processes;
         this._pattern = new RegExp('^\\s*VmSwap:\\s*(\\d+)', 'm');
@@ -209,9 +238,9 @@ var Swap = class {
             };
         });
     }
-};
+}
 
-let StopWatch = function () {
+export const StopWatch = function () {
     this.startTime = 0;
     this.stopTime = 0;
     this.running = false;
@@ -247,7 +276,14 @@ StopWatch.prototype.getElapsedSeconds = function () {
 StopWatch.prototype.printElapsed = function (name) {
     var currentName = name || 'Elapsed: ';
 
-    window.log(currentName + '[' + this.getElapsedMilliseconds() + 'ms]' + '[' + this.getElapsedSeconds() + 's]');
+    console.log(currentName + '[' + this.getElapsedMilliseconds() + 'ms]' + '[' + this.getElapsedSeconds() + 's]');
+};
+
+export const logError = function(error) {
+    let sourceFile = error.fileName;
+    let sourceLine = error.lineNumber;
+
+    console.error(`Extension System_Monitor@bghome.gmail.com: "${error}" ${sourceFile}:${sourceLine}`);
 };
 
 

@@ -1,33 +1,44 @@
 "use strict";
 
-const { GObject, St } = imports.gi;
+import GObject from 'gi://GObject';
+import St from 'gi://St';
 
-const Panel = imports.ui.main.panel;
-const PanelMenu = imports.ui.panelMenu;
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {panel as Panel} from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
-const Me = imports.misc.extensionUtils.getCurrentExtension();
-const Util = Me.imports.util;
-const FactoryModule = Me.imports.factory;
-const PrefsKeys = Me.imports.prefs_keys;
+import * as FactoryModule from './factory.js';
+import * as PrefsKeys from './prefs_keys.js';
 
-var Menu = GObject.registerClass(
+export const Menu = GObject.registerClass(
 class Menu extends PanelMenu.Button {
-    _init() {
+    constructor(extensionObject, settings) {
         let menuAlignment = 0.5;
-        super._init(menuAlignment);
 
+        super(menuAlignment);
+
+        this._layout = new St.BoxLayout();
+        this._settings = settings;
+        this._extensionObject = extensionObject;
         this._icons = {};
         this._meters = {};
         this._meter_widgets = {};
         this._event_handler_ids = [];
-    	this._layout = new St.BoxLayout();
-        this._settings = imports.misc.extensionUtils.getSettings();
         this._indicator_sort_order = 1;
         this.available_meters = [PrefsKeys.CPU_METER, PrefsKeys.MEMORY_METER, PrefsKeys.STORAGE_METER, PrefsKeys.NETWORK_METER, PrefsKeys.SWAP_METER, PrefsKeys.LOAD_METER, PrefsKeys.GPU_METER];
         this._widget_area_container = FactoryModule.AbstractFactory.create('meter-area-widget');
         this._widget_area_container.actor.vertical = this._settings.get_string(PrefsKeys.LAYOUT) === 'vertical';
         this.menu.addMenuItem(this._widget_area_container);
-        this.add_actor(this._layout);
+        this._open_state_change_id = this.menu.connect('open-state-changed', (menu, is_open) => {
+            for (let type in this._meter_widgets) {
+                if (is_open) {
+                    this._meter_widgets[type].freeze();
+                } else {
+                    this._meter_widgets[type].unfreeze();
+                }
+            }
+        });
+        this.add_child(this._layout);
 
         this._initIconsAndWidgets();
         this._addPositionSettingChangedHandler();
@@ -35,7 +46,7 @@ class Menu extends PanelMenu.Button {
         this._addMemoryCalculationSettingChangedHandler();
         this._addShowActivitySettingChangedHandler();
         this._addGPUTempUnitChangeHandler();
-        this._addIndicatorToTopBar(this._settings.get_string(PrefsKeys.POSITION));
+        this._addIndicatorToTopBar(this._settings.get_string(PrefsKeys.POSITION), extensionObject.metadata.uuid);
     }
     _initIconsAndWidgets() {
         for (let index in this.available_meters) {
@@ -47,8 +58,8 @@ class Menu extends PanelMenu.Button {
             this._addSettingChangedHandler(type);
         }
     }
-    _addIndicatorToTopBar(position) {
-        Panel.addToStatusArea(Me.metadata.uuid, this, this._indicator_sort_order, position);
+    _addIndicatorToTopBar(position, uuid) {
+        Panel.addToStatusArea(uuid, this, this._indicator_sort_order, position);
         this._indicator_previous_position = position;
     }
     _moveIndicatorOnTopBar(position) {
@@ -85,7 +96,7 @@ class Menu extends PanelMenu.Button {
     }
     _createIcon(type) {
         let can_show_activity = this._settings.get_boolean(PrefsKeys.SHOW_ACTIVITY);
-        let icon = FactoryModule.AbstractFactory.create('icon', type, {}, can_show_activity);
+        let icon = FactoryModule.AbstractFactory.create('icon', type, {}, can_show_activity, this._extensionObject);
         let meter = this._meters[type];
 
         if (meter == undefined) {
@@ -120,12 +131,12 @@ class Menu extends PanelMenu.Button {
         meter.addObserver(icon);
         this._layout.insert_child_at_index(icon, this.available_meters.indexOf(type));
         this._icons[type] = icon;
-        return FactoryModule.AbstractFactory.create('icon', type, {}, can_show_activity);
+        return FactoryModule.AbstractFactory.create('icon', type, {}, can_show_activity, this._extensionObject);
     }
     _destroyIcon(type) {
         let icon = this._icons[type];
         this._meters[type].removeObserver(icon);
-        this._layout.remove_actor(icon);
+        this._layout.remove_child(icon);
         icon.destroy();
         delete this._icons[type];
         delete this._meters[type];
@@ -228,6 +239,9 @@ class Menu extends PanelMenu.Button {
         }
 
         this._removeAllSettingChangedHandlers();
+        if (this._open_state_change_id) {
+            this.menu.disconnect(this._open_state_change_id);
+        }
         super.destroy();
     }
     updateUi() {
